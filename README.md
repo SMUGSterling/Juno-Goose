@@ -1,5 +1,8 @@
-# README for Goose-SMU-Hardened-system.md
-A hardened system.md file for Goose (https://goose-docs.ai/)
+# README for Juno-Goose
+An SMU hardened (safety and secruity focused) system.md configuration for Goose (https://goose-docs.ai/)
+
+## Why Juno-Goose?
+[How Swiss Guards And Sacred Geese Saved Rome](https://www.npr.org/2012/05/05/152092224/how-swiss-guards-and-sacred-geese-saved-rome)
 
 ## What this custom system.md file does
 
