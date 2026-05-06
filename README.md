@@ -212,6 +212,22 @@ This Security Core significantly improves Goose’s safety behavior, but it is n
 
 - **Policy Still Matters:** For student records, legal issues, HR data, research-confidential data, or actual security incidents, follow SMU policies and the appropriate escalation path.
 
+## Optional Juno MCP Companion Server
+
+The `juno-mcp/` folder contains an optional local [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) companion server that provides structured safety tools Goose can call during a session.
+
+**Juno-Goose remains a hardened `system.md` behavioral constitution.** The MCP server is optional and supplements the policy — it does not replace or weaken it.
+
+Key points:
+
+- **Runs locally over stdio.** No network calls, no telemetry, no remote dependencies.
+- **Read-only tools.** The server can inspect, classify, and redact content before returning it to Goose, but it cannot write, delete, run shell commands, or mutate any files.
+- **Protects content routed through its tools.** `safe_read_file` validates paths and scans for secrets before returning file content. `scan_text_for_secrets` redacts detected credentials before returning results. Raw secret values are never returned.
+- **Selective protection.** The server only protects content explicitly routed through its tools. If Goose uses other raw filesystem tools to read a file, this server cannot intervene.
+- **Does not universally prevent secrets from reaching an AI.** If other extensions or tools with raw file access are enabled alongside this server, this server cannot protect content they return.
+
+To get started, see [`juno-mcp/README.md`](juno-mcp/README.md) for installation and connection instructions.
+
 ## Plain-Language Summary
 
 This Goose setup is designed to be cautious. It protects credentials, student records, institutional data, and your computer. It stays inside the project folder, asks before risky actions, avoids sending data outside without approval, makes backups when practical, and prefers soft-delete instead of permanent deletion.
