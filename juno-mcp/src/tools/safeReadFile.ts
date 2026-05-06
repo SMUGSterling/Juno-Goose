@@ -39,8 +39,8 @@ export interface SafeReadResult {
   redactedContent?: string;
   findings: ScanResult["findings"];
   recommendation: string;
-  /** Absolute resolved path that was evaluated. */
-  resolvedPath?: string;
+  /** Path relative to the allowed root that was evaluated. */
+  relativePath?: string;
   /** Whether the content was truncated due to maxBytes. */
   truncated?: boolean;
 }
@@ -51,10 +51,13 @@ export interface SafeReadResult {
 
 function getAllowedRoot(): string {
   const envRoot = process.env["JUNO_MCP_ROOT"];
-  if (envRoot) {
-    return path.resolve(envRoot);
+  const root = envRoot ? path.resolve(envRoot) : process.cwd();
+  // Resolve symlinks in the root itself so comparisons are against real paths.
+  try {
+    return fs.realpathSync(root);
+  } catch {
+    return root;
   }
-  return process.cwd();
 }
 
 // ---------------------------------------------------------------------------
@@ -127,29 +130,63 @@ export function safeReadFile(
       recommendation:
         "Only files within the project root may be read. " +
         "Set JUNO_MCP_ROOT to expand the allowed root if needed.",
-      resolvedPath,
+      relativePath: path.relative(allowedRoot, resolvedPath),
     };
   }
 
-  // --- Step 3: Block sensitive paths ---
-  if (isSensitivePath(resolvedPath)) {
+  // --- Step 2b: Resolve symlinks and re-check root boundary ---
+  // Using realpathSync prevents symlink-based traversal attacks where a
+  // symlink inside the allowed root points to a file outside it.
+  let realPath: string;
+  try {
+    realPath = fs.realpathSync(resolvedPath);
+  } catch {
+    // Path doesn't exist yet — existence check in Step 4 will handle this.
+    realPath = resolvedPath;
+  }
+
+  const normalizedRealRoot = path.normalize(allowedRoot + path.sep);
+  const normalizedRealPath = path.normalize(realPath);
+
+  if (!normalizedRealPath.startsWith(normalizedRealRoot) &&
+      normalizedRealPath !== path.normalize(allowedRoot)) {
     return {
       allowed: false,
       blocked: true,
-      reason: `Sensitive path blocked: "${path.basename(resolvedPath)}" matches a known secret or credential file pattern.`,
-      containsSecrets: true,
+      reason: `Symlink traversal blocked: "${filePath}" resolves via symlink to a path outside the allowed root.`,
+      containsSecrets: false,
+      findings: [],
+      recommendation:
+        "Symlinks that point outside the project root are not permitted. " +
+        "Provide a direct path to a file within the project.",
+      relativePath: path.relative(allowedRoot, resolvedPath),
+    };
+  }
+
+  // Use the symlink-resolved path for all subsequent operations.
+  const safePath = realPath;
+  const relativePath = path.relative(allowedRoot, resolvedPath);
+
+  // --- Step 3: Block sensitive paths ---
+  if (isSensitivePath(safePath)) {
+    return {
+      allowed: false,
+      blocked: true,
+      reason: `Sensitive path blocked: "${path.basename(safePath)}" matches a known secret or credential file pattern.`,
+      // The file was not read or scanned — containsSecrets reflects scan results only.
+      containsSecrets: false,
       findings: [],
       recommendation:
         "This file likely contains credentials. " +
         "Do not read it directly. If you need to rotate a credential, use remediation guidance.",
-      resolvedPath,
+      relativePath,
     };
   }
 
   // --- Step 4: Check file existence and type ---
   let stat: fs.Stats;
   try {
-    stat = fs.statSync(resolvedPath);
+    stat = fs.statSync(safePath);
   } catch {
     return {
       allowed: false,
@@ -158,7 +195,7 @@ export function safeReadFile(
       containsSecrets: false,
       findings: [],
       recommendation: "Verify the file path and that it exists in the project.",
-      resolvedPath,
+      relativePath,
     };
   }
 
@@ -170,7 +207,7 @@ export function safeReadFile(
       containsSecrets: false,
       findings: [],
       recommendation: "Provide the path to a regular file.",
-      resolvedPath,
+      relativePath,
     };
   }
 
@@ -184,7 +221,7 @@ export function safeReadFile(
   let truncated = false;
 
   try {
-    const fd = fs.openSync(resolvedPath, "r");
+    const fd = fs.openSync(safePath, "r");
     try {
       rawBuffer = Buffer.alloc(clampedMax + 1);
       const bytesRead = fs.readSync(fd, rawBuffer, 0, clampedMax + 1, 0);
@@ -206,14 +243,14 @@ export function safeReadFile(
       containsSecrets: false,
       findings: [],
       recommendation: "Check file permissions.",
-      resolvedPath,
+      relativePath,
     };
   }
 
   const rawText = rawBuffer.toString("utf8");
 
   // --- Step 6: Scan for secrets ---
-  const scan = scanTextForSecrets(rawText, path.basename(resolvedPath));
+  const scan = scanTextForSecrets(rawText, path.basename(safePath));
 
   const truncationNote = truncated
     ? ` (content truncated at ${clampedMax} bytes)`
@@ -228,7 +265,7 @@ export function safeReadFile(
       redactedContent: scan.redactedText,
       findings: scan.findings,
       recommendation: scan.recommendation,
-      resolvedPath,
+      relativePath,
       truncated,
     };
   }
@@ -242,7 +279,7 @@ export function safeReadFile(
     findings: [],
     recommendation:
       "No obvious secrets detected. Manual review is still recommended for sensitive content.",
-    resolvedPath,
+    relativePath,
     truncated,
   };
 }

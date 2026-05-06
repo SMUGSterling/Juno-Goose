@@ -91,14 +91,13 @@ const SECRET_PATTERNS: SecretPattern[] = [
   {
     name: "Private Key Block",
     severity: "critical",
-    regex: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g,
-    redactedExampleFn: () => "-----BEGIN [REDACTED] PRIVATE KEY-----",
-  },
-  {
-    name: "SSH Private Key",
-    severity: "critical",
-    regex: /-----BEGIN OPENSSH PRIVATE KEY-----/g,
-    redactedExampleFn: () => "-----BEGIN OPENSSH PRIVATE KEY [REDACTED]-----",
+    // Matches the full PEM block from BEGIN header through END footer,
+    // including all intervening base64 content, so the entire key material
+    // is redacted (not just the header line).
+    regex:
+      /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g,
+    redactedExampleFn: () =>
+      "-----BEGIN [REDACTED] PRIVATE KEY-----\n[REDACTED]\n-----END [REDACTED] PRIVATE KEY-----",
   },
   {
     name: "Database URL with Credentials",

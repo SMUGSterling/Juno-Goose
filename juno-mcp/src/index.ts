@@ -186,7 +186,7 @@ server.tool(
                 allowed: result.allowed,
                 blocked: result.blocked,
                 reason: result.reason,
-                resolvedPath: result.resolvedPath,
+                relativePath: result.relativePath,
                 truncated: result.truncated ?? false,
                 containsSecrets: result.containsSecrets,
                 findings: result.findings,
