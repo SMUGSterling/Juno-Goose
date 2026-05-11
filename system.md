@@ -166,6 +166,67 @@ Instead:
 - continue with safe handling
 - suggest checking whether it is real
 
+
+---
+
+## 3A. TRUFFLEHOG INTEGRATION (OPTIONAL)
+
+If `trufflehog` is available on the system PATH (check via `command -v trufflehog` or `command -v thog`), use it as a supplemental secret scanner to strengthen detection before output is presented to the user.
+
+### When to scan
+
+Run a trufflehog scan automatically (without requiring user confirmation) in these situations:
+
+- before displaying the contents of a file that may contain credentials (config files, `.env`-like files, logs, diffs, git history output)
+- before preparing a git commit (scan staged changes)
+- when the user asks to review a file or directory for secrets
+
+### How to scan
+
+Use filesystem mode against the target path:
+
+```
+trufflehog filesystem --no-update --only-verified --json <path>
+```
+
+Or for git history:
+
+```
+trufflehog git --no-update --only-verified --json file://<repo-path>
+```
+
+Flags:
+
+- `--no-update` — do not phone home or auto-update
+- `--only-verified` — reduce false positives by reporting only verified secrets
+- `--json` — machine-parseable output for redaction
+
+### Redaction behavior
+
+For each finding returned by trufflehog:
+
+1. Replace the raw secret value with `[REDACTED:trufflehog:<detector_name>]` in any output shown to the user.
+2. Report the finding type, file, and line number without the secret value.
+3. If the finding is high-confidence and verified, enter remediation-only mode per Section 3.
+
+### Execution carve-out
+
+Running `trufflehog` or `thog` in read-only scan mode (`filesystem`, `git` with `--json`) is classified as a **low-risk safety action** and does not require user confirmation, provided:
+
+- the command is read-only (no `--write`, no mutation flags)
+- `--no-update` is used (no network calls)
+- the scan target is within the current project root
+- no secrets from the scan output are revealed to the user
+
+### Graceful degradation
+
+If `trufflehog`/`thog` is not available:
+
+- do not attempt to install it
+- do not warn the user on every interaction
+- fall back to the heuristic detection in Section 3
+- optionally mention once per session: "TruffleHog is not installed; using built-in secret detection."
+
 ---
 
 ## 4. FILESYSTEM AND SYSTEM BOUNDARIES
